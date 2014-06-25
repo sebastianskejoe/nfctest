@@ -1,0 +1,130 @@
+<protocol name="PN532">
+    <command name="Diagnose" code="0x00">
+        <arg name="NumTst" type="u" />
+        <arg name="InParam" type="a" />
+        <response code="0x01">
+            <arg name="OutParam" type="a" />
+        </response>
+    </command>
+    <command name="GetFirmwareVersion" code="0x02">
+        <response code="0x03">
+            <arg name="IC" type="u" />
+            <arg name="Ver" type="u" />
+            <arg name="Rev" type="u" />
+            <arg name="Support" type="u" />
+        </response>
+    </command>
+    <command name="GetGeneralStatus" code="0x04">
+        <response code="0x05">
+            <arg name="Err" type="u" />
+            <arg name="Field" type="u" />
+            <arg name="NbTg" type="u" />
+            <arg name="TgData" type="a" lngth="NbTg*4" />
+            <arg name="SAMStatus" type="u" />
+        </response>
+    </command>
+    <command name="ReadRegister" code="0x06">
+        <arg name="Adr" type="a" />
+        <response code="0x07">
+            <arg name="Val" type="a" />
+        </response>
+    </command>
+    <command name="WriteRegister" code="0x08">
+        <arg name="AdrVal" type="a" />
+        <response code="0x09">
+        </response>
+    </command>
+    <command name="ReadGPIO" code="0x0C">
+        <response code="0x0D">
+            <arg name="P3" type="u" />
+            <arg name="P7" type="u" />
+            <arg name="IOI1" type="u" />
+        </response>
+    </command>
+    <command name="WriteGPIO" code="0x0E">
+        <arg name="P3" type="u" />
+        <arg name="P7" type="u" />
+        <response code="0x0F">
+        </response>
+    </command>
+    <command name="SetSerialBaudRate" code="0x10">
+        <arg name="BR" type="u" />
+        <response code="0x11">
+        </response>
+    </command>
+    <command name="SetParameters" code="0x12">
+        <arg name="Flags" type="u" />
+        <response code="0x13">
+        </response>
+    </command>
+    <command name="SAMConfiguration" code="0x14">
+        <arg name="Mode" type="u" />
+        <arg name="Timeout" type="u" />
+        <arg name="IRQ" type="u" default="0x01" />
+        <response code="0x15">
+        </response>
+    </command>
+    <command name="PowerDown" code="0x16">
+        <arg name="WakeUpEnable" type="u" />
+        <arg name="GenerateIRQ" type="u" />
+        <response code="0x17">
+            <arg name="Status" type="u" />
+        </response>
+    </command>
+    <command name="RFConfiguration" code="0x32">
+        <arg name="CfgItem" type="u" />
+        <arg name="ConfigurationData" type="a" />
+        <response code="0x33">
+        </response>
+    </command>
+    <command name="RFRegulationTest" code="0x58">
+        <arg name="TxMode" type="u" />
+    </command>
+    <command name="InJumpForDEP" code="0x56">
+        <arg name="ActPass" type="u" />
+        <arg name="BR" type="u" />
+        <arg name="Next" type="u" />
+        <arg name="PassiveInitiatorData" type="a" default="0" />
+        <arg name="NFCID3i" type="a" default="0" />
+        <arg name="Gi" type="a" default="0" />
+        <response code="0x57">
+            <arg name="Status" type="u" />
+            <arg name="Tg" type="u" />
+            <arg name="NFCID3t" type="a" length="10" />
+            <arg name="DIDt" type="u" />
+            <arg name="BSt" type="u" />
+            <arg name="BRt" type="u" />
+            <arg name="TO" type="u" />
+            <arg name="PPt" type="u" />
+            <arg name="Gt" type="a" />
+        </response>
+    </command>
+    <command name="InJumpForPSL" code="0x46">
+        <arg name="ActPass" type="u" />
+        <arg name="BR" type="u" />
+        <arg name="Next" type="u" />
+        <arg name="PassiveInitiatorData" type="a" default="0" />
+        <arg name="NFCID3i" type="a" default="0" />
+        <arg name="Gi" type="a" default="0" />
+        <response code="0x47">
+            <arg name="Status" type="u" />
+            <arg name="Tg" type="u" />
+            <arg name="NFCID3t" type="a" length="10" />
+            <arg name="DIDt" type="u" />
+            <arg name="BSt" type="u" />
+            <arg name="BRt" type="u" />
+            <arg name="TO" type="u" />
+            <arg name="PPt" type="u" />
+            <arg name="Gt" type="a" />
+        </response>
+    </command>
+    <command name="InListPassiveTarget" code="0x4A">
+        <arg name="MaxTg" type="u" />
+        <arg name="BrTy" type="u" />
+        <arg name="InitiatorData" type="a" />
+        <response code="0x4B">
+            <arg name="NbTg" type="u" />
+            <arg name="TargetData" type="a" />
+        </response>
+    </command>
+</protocol>
