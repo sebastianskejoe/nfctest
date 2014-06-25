@@ -1,0 +1,12 @@
+To generate NFC lib:
+
+    cd lib/NFC
+    go run generate.go
+
+To build:
+
+    ino build -f "-I lib/"
+
+To upload:
+
+    ino upload
