@@ -196,6 +196,13 @@ void sendRequest(char *name, unsigned char code, char *signature, ...) {
     memset(requestdata, 0, 255);
     memset(data, 0, 255);
 
+    // Clear display for debugging
+    if (_dbgLCD) {
+        _dbgLCD->clear();
+        _dbgLCD->print(name);
+        delay(500);
+    }
+
     va_start(args, signature);
     data[length] = code;
     length += sizeof(code);
@@ -232,13 +239,190 @@ void sendRequest(char *name, unsigned char code, char *signature, ...) {
         Serial.write(requestdata[i]);
     }
     Serial.flush();
+
+    free(data);
+    free(requestdata);
+}
+
+void * nfcReadResponse(char *signature, ...) {
+
+    unsigned char buf[255];
+    unsigned char cur, last = 0xFF;
+    unsigned char keepalive = 20;
+
+    // Frame data
+    unsigned char len, lcs, tfi, code, dcs;
+    unsigned char acked = 0;
+
+    // For constructing a return array
+    unsigned char ret[255], *addr;
+    va_list vargs;
+    unsigned char a, i, n, siglen = strlen(signature), sum = 0, el, pos = 0;
+
+    // Empty array
+    unsigned char empty[255];
+    memset(empty, 0, 255);
+
+    // Special codes
+    char ACK[2] = {0xFF, 0x00};
+    char NACK[2] = {0x00, 0x00};
+
+    // Read until we get a frame
+    va_start(vargs, signature);
+    while (true) {
+        cur = getByte();
+
+        if (!keepalive) {
+            if (_dbgLCD) {
+                _dbgLCD->print("kill");
+            }
+            break;
+        }
+
+        // Check if it is the start of a frame
+        if (last == 0x00 && cur == 0xFF) {
+
+            // Get the length of the packet
+            len = getByte();
+            
+            // Check for special cases
+            switch (len) {
+            // ACK
+            case 0x00:
+                // Check if we have a 0xFF 0x00 next
+                getBytes(buf, 2);
+                int res;
+                if (memcmp(buf, ACK, 2) == 0) {
+                    acked = 1;
+                }
+
+                break;
+
+            // NACK or extended
+            case 0xFF:
+                getBytes(buf, 2);
+
+                // Is it a NACK
+                if (memcmp(buf, NACK, 2)) {
+                    free(buf);
+                    free(ret);
+                    va_end(vargs);
+                    return empty;
+                } else if (buf[0] == 0xFF) {
+                    // It is an extended frame
+                    //return readExtendedFrame(buf[1]);
+                }
+                break;
+
+            // A normal frame
+            default:
+                lcs = getByte();
+
+                // Make sure it is a response
+                tfi = getByte();
+                if (tfi != 0xD5) {
+                    return 0;
+                }
+
+                code = getByte();
+
+                // Read data
+                getBytes(buf, len-2);
+
+                // Data check sum
+                dcs = getByte();
+
+                // Empty postamble
+                getByte();
+
+                // Get length of args
+                for (i = 0; i < siglen; i++) {
+                    switch (signature[i]) {
+                    case 'u':
+                        ret[sum] = buf[pos];
+                        sum += 1;
+                        pos += 1;
+                        break;
+                    case 'a':
+                        addr = va_arg(vargs, unsigned char*);
+
+/*                        // Last argument
+                        if (i == siglen-1) {
+                            el = len-2-sum;
+                        }
+
+                        // Check if size is specified
+                        for (a = 1; a < siglen-i; i++) {
+                            n = signature[i+a];
+
+                            // If n isn't a number, length is specified
+                            if (n < '0' || n > '9') {
+                                break;
+                            }
+
+                            el *= 10;
+                            el += n-'0';
+                        }
+
+                        // No size specified and not last argument
+                        // Guess that length is remaining length - remaining number of args
+                        // This assumes that there are no more arrays
+                        if (el == 0) {
+                            el = len-2-(siglen-1-i);
+                        }
+
+                        // Copy it
+                        memcpy(addr, &buf[pos], el);*/
+                        addr = &buf[pos];
+                        sum += sizeof(unsigned char*);
+
+                        break;
+                    }
+                }
+                ret[sum] = acked;
+
+                free(buf); // XXX
+                free(empty);
+                va_end(vargs);
+                return ret;
+                break;
+            }
+        }
+
+        last = cur;
+        keepalive--;
+    }
+
+    return empty;
+}
+
+unsigned char getByte() {
+    delay(100);
+    return Serial.read();
+}
+
+void getBytes(unsigned char *buf, int n) {
+    int i;
+    for (i = 0; i < n; i++) {
+        buf[i] = getByte();
+    }
 }
 
 // BEGIN generated code
 {{range .Commands}}{{if len .Response.Args}}{{.Name}}Response * {{else}}void {{end}}{{.Name}}({{range $i, $e := .Args}}{{if $i}}, {{end}}{{.Type}} {{.Name}}{{end}}) {
     sendRequest("{{.Name}}", {{.Code}}, "{{range .Args}}{{.Typecode}}{{end}}"{{range $i, $e := .Args}}, {{.Name}}{{end}});{{ if len .Response.Args }}
 
-    return ({{.Name}}Response *)readResponse("{{range .Response.Args}}{{.Typecode}}{{if .Length}}{{.Length}}{{end}}{{end}}");{{end}}
+    delay(100);
+    {{range .Response.Args}}{{if eq .Typecode "a"}}
+    unsigned char *a{{.Name}};// = (unsigned char *)malloc({{if .Length}}{{.Length}}{{else}}255{{end}});{{end}}{{end}}
+    {{.Name}}Response *resp = ({{.Name}}Response *)nfcReadResponse("{{range .Response.Args}}{{.Typecode}}{{if .Length}}{{.Length}}{{end}}{{end}}"{{range .Response.Args}}{{if eq .Typecode "a"}}, a{{.Name}}{{end}}{{end}});
+    {{range .Response.Args}}{{if eq .Typecode "a"}}
+    resp->{{.Name}} = a{{.Name}};
+    {{end}}{{end}}
+    _dbgLCD->setCursor(0,1);
+    _dbgLCD->print("foo");
+    delay(500);
+    return resp;{{end}}
 }
 
 {{end}}// END generated code
@@ -262,12 +446,15 @@ void requestHeader(unsigned char *request, unsigned char length);
 unsigned char requestDCS(unsigned char *data, unsigned char length);
 void sendRequest(char *name, unsigned char code, char *signature, ...);
 
-void * readResponse(char * signature);
+void * nfcReadResponse(char * signature, ...);
+unsigned char getByte();
+void getBytes(unsigned char *buf, int n);
 
 // BEGIN generated response structs
 {{range .Commands}}{{if len .Response.Args}}
 typedef struct { {{range .Response.Args}}
     {{.Type}} {{.Name}};{{end}}
+    unsigned char acked;
 } {{.Name}}Response;
 {{end}}{{end}}
 // END generated response structs

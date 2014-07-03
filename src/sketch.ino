@@ -27,6 +27,7 @@ unsigned char receive_ACK[25];//Command receiving buffer
 #include "Arduino.h"
 #include <NFC.h>
 #include <LiquidCrystal.h>
+#include <string.h>
 
 LiquidCrystal LCD(5,6,9,10,11,12);
 
@@ -37,9 +38,9 @@ void setup()
     // Setup LCD and serial
     LCD.begin(16,2);
     LCD.clear();
-    LCD.print("Welcome!");
+    LCD.print("NFC test v0.0!");
     Serial.begin(115200);
-//    setDebugLCD(&LCD);
+    setDebugLCD(&LCD);
 
     pinMode(BUTTON_PIN, INPUT);
 }
@@ -47,7 +48,10 @@ void setup()
 int state = 0;
 
 void loop() {
-    int bs = digitalRead(BUTTON_PIN);
+    int bs = digitalRead(BUTTON_PIN), i;
+    char *buf;
+    GetFirmwareVersionResponse *r;
+    InListPassiveTargetResponse *pt;
     if (bs == HIGH) {
         switch (state) {
         case 0:
@@ -57,21 +61,41 @@ void loop() {
             dsplay(15);
             break;
         case 1:
-            GetFirmwareVersion();
-            delay(100);
-            array_ACK(20);
-            dsplay(20);
-            break;
-        case 2:
-            firmware_version();
-            delay(100);
-            array_ACK(20);
-            dsplay(20);
+            r = GetFirmwareVersion();
+            LCD.clear();
+            LCD.print("Version: ");
+            LCD.print(r->Ver);
+            LCD.print(".");
+            LCD.print(r->Rev);
+
+            free(r);
             break;
         default:
-            LCD.print("No more actions");
+            pt = InListPassiveTarget(2,0,0);
+            LCD.clear();
+            LCD.print("Targets: ");
+
+            LCD.print(pt->NbTg);
+            delay(500);
+
+            LCD.setCursor(0,1);
+            for (i = 0; i < pt->NbTg; i++) {
+                LCD.print(pt->TargetData[i*9+5], HEX);
+                LCD.print(" ");
+                LCD.print(pt->TargetData[i*9+6], HEX);
+                LCD.print(" ");
+                LCD.print(pt->TargetData[i*9+7], HEX);
+                LCD.print(" ");
+                LCD.print(pt->TargetData[i*9+8], HEX);
+                LCD.print(" ");
+            }
+
+            free(pt->TargetData);
+            free(pt);
+            break;
         }
         state++;
+        delay(50);
     }
 }
 
