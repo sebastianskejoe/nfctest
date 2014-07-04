@@ -1,158 +1,4 @@
-package main
-
-import (
-    "encoding/xml"
-    "os"
-    "log"
-    "text/template"
-//    "strconv"
-    "fmt"
-)
-
-type Arg struct {
-    Name string
-    Type string
-    Typecode string
-    Default string
-    Length string
-}
-
-type Response struct {
-    Args []Arg
-}
-
-type Command struct {
-    Name string
-    Code string
-    Args []Arg
-    Response Response
-}
-
-type XMLArg struct {
-    Commands []Command
-}
-
-func main() {
-    protocol, err := os.Open("PN532.xml")
-    if err != nil {
-        log.Fatal(err)
-    }
-
-    // Parse protocol
-    commands := make([]Command, 0)
-    var cmd Command
-    var resp Response
-    inResp := false
-
-    // Loop through each token
-    decoder := xml.NewDecoder(protocol)
-    for token, err := decoder.Token(); err == nil; token, err = decoder.Token() {
-        switch elem := token.(type) {
-
-        // Check for start element
-        case xml.StartElement:
-            switch elem.Name.Local {
-            case "command": // Start of new command
-                cmd = newCommand(elem.Attr)
-            case "arg":
-                arg := newArg(elem.Attr)
-
-                // Check if the arg belongs to the response
-                if inResp {
-                    println("added arg to resp ", cmd.Name)
-                    resp.Args = append(resp.Args, arg)
-                } else {
-                    cmd.Args = append(cmd.Args, arg)
-                }
-            case "response":
-                resp = newResponse(cmd.Name, elem.Attr)
-                inResp = true
-            }
-
-        // Check for end element
-        case xml.EndElement:
-            switch elem.Name.Local {
-            case "command":
-                commands = append(commands, cmd)
-            case "response":
-                cmd.Response = resp
-                inResp = false
-            }
-        }
-    }
-
-    // Print commands
-    commandsfile, err := os.Create("NFC.cpp")
-    if err != nil {
-        log.Fatal(err)
-    }
-    headerfile, err := os.Create("NFC.h")
-    if err != nil {
-        log.Fatal(err)
-    }
-
-    tmpl := template.Must(template.New("cmd").Parse(cmdTemplate))
-    tmpl.Execute(commandsfile, XMLArg{commands})
-
-    tmpl = template.Must(template.New("header").Parse(headerTemplate))
-    tmpl.Execute(headerfile, XMLArg{commands})
-}
-
-func newCommand(attr []xml.Attr) Command {
-    var cmd Command
-    for _, value := range attr {
-        switch value.Name.Local {
-        case "name":
-            cmd.Name = value.Value
-            fmt.Println("Command: ",cmd.Name)
-        case "code":
-            cmd.Code = value.Value
-        }
-    }
-    return cmd
-}
-
-func newResponse(name string, attr []xml.Attr) Response {
-/*    var cmd Command
-    cmd.Name = fmt.Sprintf("%sResponse", name)
-    for _, value := range attr {
-        switch value.Name.Local {
-        case "name":
-            cmd.Name = value.Value
-        case "code":
-            cmd.Code = value.Value
-        }
-    }
-    return cmd*/
-    var resp Response
-    return resp
-}
-
-func newArg(attr []xml.Attr) Arg {
-    var arg Arg
-    for _, value := range attr {
-        switch value.Name.Local {
-        case "name":
-            arg.Name = value.Value
-        case "type":
-            switch value.Value {
-            case "u":
-                arg.Typecode = value.Value
-                arg.Type = "unsigned char"
-            case "a":
-                arg.Typecode = value.Value
-                arg.Type = "unsigned char *"
-            }
-        case "default":
-            arg.Default = value.Value
-        case "length":
-            arg.Length = value.Value
-        }
-    }
-    return arg
-}
-
-var cmdTemplate string = `#include <string.h>
+#include <string.h>
 #include <stdlib.h>
 #include <stdarg.h>
 #include <stdio.h>
@@ -407,77 +253,218 @@ void getBytes(unsigned char *buf, int n) {
 }
 
 // BEGIN generated code
-{{range .Commands}}{{if len .Response.Args}}{{.Name}}Response * {{else}}void {{end}}{{.Name}}({{range $i, $e := .Args}}{{if $i}}, {{end}}{{.Type}} {{.Name}}{{end}}) {
-    sendRequest((char *)"{{.Name}}", {{.Code}}, (char *)"{{range .Args}}{{.Typecode}}{{end}}"{{range $i, $e := .Args}}, {{.Name}}{{end}});{{ if len .Response.Args }}
+DiagnoseResponse * Diagnose(unsigned char NumTst, unsigned char * InParam) {
+    sendRequest((char *)"Diagnose", 0x00, (char *)"ua", NumTst, InParam);
 
     #ifndef TEST
     delay(100);
     #endif
-    {{range .Response.Args}}{{if eq .Typecode "a"}}
-    unsigned char *a{{.Name}} = (unsigned char *)malloc({{if .Length}}{{.Length}}{{else}}255{{end}});{{end}}{{end}}
-    {{.Name}}Response *resp = ({{.Name}}Response *)nfcReadResponse((char *)"{{range .Response.Args}}{{.Typecode}}{{if .Length}}{{.Length}}{{end}}{{end}}"{{range .Response.Args}}{{if eq .Typecode "a"}}, a{{.Name}}{{end}}{{end}});
-    {{range .Response.Args}}{{if eq .Typecode "a"}}
-    resp->{{.Name}} = a{{.Name}};
-    {{end}}{{end}}
+    
+    unsigned char *aOutParam = (unsigned char *)malloc(255);
+    DiagnoseResponse *resp = (DiagnoseResponse *)nfcReadResponse((char *)"a", aOutParam);
+    
+    resp->OutParam = aOutParam;
+    
 
     #ifndef TEST
     _dbgLCD->setCursor(0,1);
     _dbgLCD->print("foo");
     delay(500);
     #endif
-    return resp;{{end}}
+    return resp;
 }
 
-{{end}}// END generated code
-`
+GetFirmwareVersionResponse * GetFirmwareVersion() {
+    sendRequest((char *)"GetFirmwareVersion", 0x02, (char *)"");
 
-var headerTemplate string = `#ifndef __NFC_H
-#define __NFC_H
+    #ifndef TEST
+    delay(100);
+    #endif
+    
+    GetFirmwareVersionResponse *resp = (GetFirmwareVersionResponse *)nfcReadResponse((char *)"uuuu");
+    
 
-#ifndef TEST
-#include <LiquidCrystal.h>
-static LiquidCrystal *_dbgLCD = 0;
-void setDebugLCD(LiquidCrystal *lcd);
-#endif
+    #ifndef TEST
+    _dbgLCD->setCursor(0,1);
+    _dbgLCD->print("foo");
+    delay(500);
+    #endif
+    return resp;
+}
 
-#ifndef TEST
-#define DBG(msg) if (_dbgLCD) _dbgLCD->print(msg);
-#define DBGHEX(msg) if (_dbgLCD) _dbgLCD->print(msg, HEX);
-#else
-#define DBG(msg) printf("%s", msg);
-#define DBGHEX(msg) printf("%x ", msg);
-#endif
+GetGeneralStatusResponse * GetGeneralStatus() {
+    sendRequest((char *)"GetGeneralStatus", 0x04, (char *)"");
 
-#ifdef TEST
-static int test_resp_i = 0;
-static char test_response[] = {0x00, 0x00, 0xFF, 0x00, 0xFF, 0x00, 0x00,
-                       0x00, 0xFF, 0x06, 0xFA, 0xD5, 0x03, 0x32,
-                       0x01, 0x06, 0x07, 0xE8, 0x00, 0x00, 0x00,
-                       0xFF, 0x00, 0xFF, 0x00, 0x00, 0x00, 0xFF,
-                       0x0C, 0xF4, 0xD5, 0x4B, 0x01, 0x01, 0x00,
-                       0x04, 0x08, 0x04, 0xFF, 0xFF, 0xFF, 0xFF,
-                       0x5A, 0x00};
-#endif
+    #ifndef TEST
+    delay(100);
+    #endif
+    
+    unsigned char *aTgData = (unsigned char *)malloc(255);
+    GetGeneralStatusResponse *resp = (GetGeneralStatusResponse *)nfcReadResponse((char *)"uuuau", aTgData);
+    
+    resp->TgData = aTgData;
+    
 
-void requestHeader(unsigned char *request, unsigned char length);
-unsigned char requestDCS(unsigned char *data, unsigned char length);
-void sendRequest(char *name, unsigned char code, char *signature, ...);
+    #ifndef TEST
+    _dbgLCD->setCursor(0,1);
+    _dbgLCD->print("foo");
+    delay(500);
+    #endif
+    return resp;
+}
 
-void * nfcReadResponse(char * signature, ...);
-unsigned char getByte();
-void getBytes(unsigned char *buf, int n);
+ReadRegisterResponse * ReadRegister(unsigned char * Adr) {
+    sendRequest((char *)"ReadRegister", 0x06, (char *)"a", Adr);
 
-// BEGIN generated response structs
-{{range .Commands}}{{if len .Response.Args}}
-typedef struct { {{range .Response.Args}}
-    {{.Type}} {{.Name}};{{end}}
-    unsigned char acked;
-} {{.Name}}Response;
-{{end}}{{end}}
-// END generated response structs
+    #ifndef TEST
+    delay(100);
+    #endif
+    
+    unsigned char *aVal = (unsigned char *)malloc(255);
+    ReadRegisterResponse *resp = (ReadRegisterResponse *)nfcReadResponse((char *)"a", aVal);
+    
+    resp->Val = aVal;
+    
 
+    #ifndef TEST
+    _dbgLCD->setCursor(0,1);
+    _dbgLCD->print("foo");
+    delay(500);
+    #endif
+    return resp;
+}
 
-// BEGIN generated requests{{range .Commands}}
-{{if len .Response.Args}}{{.Name}}Response * {{else}}void {{end}}{{.Name}}({{range $i, $e := .Args}}{{if $i}}, {{end}}{{.Type}} {{.Name}}{{if .Default}} = {{.Default}}{{end}}{{end}});{{end}}
-// END generated requests
-#endif`
+void WriteRegister(unsigned char * AdrVal) {
+    sendRequest((char *)"WriteRegister", 0x08, (char *)"a", AdrVal);
+}
+
+ReadGPIOResponse * ReadGPIO() {
+    sendRequest((char *)"ReadGPIO", 0x0C, (char *)"");
+
+    #ifndef TEST
+    delay(100);
+    #endif
+    
+    ReadGPIOResponse *resp = (ReadGPIOResponse *)nfcReadResponse((char *)"uuu");
+    
+
+    #ifndef TEST
+    _dbgLCD->setCursor(0,1);
+    _dbgLCD->print("foo");
+    delay(500);
+    #endif
+    return resp;
+}
+
+void WriteGPIO(unsigned char P3, unsigned char P7) {
+    sendRequest((char *)"WriteGPIO", 0x0E, (char *)"uu", P3, P7);
+}
+
+void SetSerialBaudRate(unsigned char BR) {
+    sendRequest((char *)"SetSerialBaudRate", 0x10, (char *)"u", BR);
+}
+
+void SetParameters(unsigned char Flags) {
+    sendRequest((char *)"SetParameters", 0x12, (char *)"u", Flags);
+}
+
+void SAMConfiguration(unsigned char Mode, unsigned char Timeout, unsigned char IRQ) {
+    sendRequest((char *)"SAMConfiguration", 0x14, (char *)"uuu", Mode, Timeout, IRQ);
+}
+
+PowerDownResponse * PowerDown(unsigned char WakeUpEnable, unsigned char GenerateIRQ) {
+    sendRequest((char *)"PowerDown", 0x16, (char *)"uu", WakeUpEnable, GenerateIRQ);
+
+    #ifndef TEST
+    delay(100);
+    #endif
+    
+    PowerDownResponse *resp = (PowerDownResponse *)nfcReadResponse((char *)"u");
+    
+
+    #ifndef TEST
+    _dbgLCD->setCursor(0,1);
+    _dbgLCD->print("foo");
+    delay(500);
+    #endif
+    return resp;
+}
+
+void RFConfiguration(unsigned char CfgItem, unsigned char * ConfigurationData) {
+    sendRequest((char *)"RFConfiguration", 0x32, (char *)"ua", CfgItem, ConfigurationData);
+}
+
+void RFRegulationTest(unsigned char TxMode) {
+    sendRequest((char *)"RFRegulationTest", 0x58, (char *)"u", TxMode);
+}
+
+InJumpForDEPResponse * InJumpForDEP(unsigned char ActPass, unsigned char BR, unsigned char Next, unsigned char * PassiveInitiatorData, unsigned char * NFCID3i, unsigned char * Gi) {
+    sendRequest((char *)"InJumpForDEP", 0x56, (char *)"uuuaaa", ActPass, BR, Next, PassiveInitiatorData, NFCID3i, Gi);
+
+    #ifndef TEST
+    delay(100);
+    #endif
+    
+    unsigned char *aNFCID3t = (unsigned char *)malloc(10);
+    unsigned char *aGt = (unsigned char *)malloc(255);
+    InJumpForDEPResponse *resp = (InJumpForDEPResponse *)nfcReadResponse((char *)"uua10uuuuua", aNFCID3t, aGt);
+    
+    resp->NFCID3t = aNFCID3t;
+    
+    resp->Gt = aGt;
+    
+
+    #ifndef TEST
+    _dbgLCD->setCursor(0,1);
+    _dbgLCD->print("foo");
+    delay(500);
+    #endif
+    return resp;
+}
+
+InJumpForPSLResponse * InJumpForPSL(unsigned char ActPass, unsigned char BR, unsigned char Next, unsigned char * PassiveInitiatorData, unsigned char * NFCID3i, unsigned char * Gi) {
+    sendRequest((char *)"InJumpForPSL", 0x46, (char *)"uuuaaa", ActPass, BR, Next, PassiveInitiatorData, NFCID3i, Gi);
+
+    #ifndef TEST
+    delay(100);
+    #endif
+    
+    unsigned char *aNFCID3t = (unsigned char *)malloc(10);
+    unsigned char *aGt = (unsigned char *)malloc(255);
+    InJumpForPSLResponse *resp = (InJumpForPSLResponse *)nfcReadResponse((char *)"uua10uuuuua", aNFCID3t, aGt);
+    
+    resp->NFCID3t = aNFCID3t;
+    
+    resp->Gt = aGt;
+    
+
+    #ifndef TEST
+    _dbgLCD->setCursor(0,1);
+    _dbgLCD->print("foo");
+    delay(500);
+    #endif
+    return resp;
+}
+
+InListPassiveTargetResponse * InListPassiveTarget(unsigned char MaxTg, unsigned char BrTy, unsigned char * InitiatorData) {
+    sendRequest((char *)"InListPassiveTarget", 0x4A, (char *)"uua", MaxTg, BrTy, InitiatorData);
+
+    #ifndef TEST
+    delay(100);
+    #endif
+    
+    unsigned char *aTargetData = (unsigned char *)malloc(255);
+    InListPassiveTargetResponse *resp = (InListPassiveTargetResponse *)nfcReadResponse((char *)"ua", aTargetData);
+    
+    resp->TargetData = aTargetData;
+    
+
+    #ifndef TEST
+    _dbgLCD->setCursor(0,1);
+    _dbgLCD->print("foo");
+    delay(500);
+    #endif
+    return resp;
+}
+
+// END generated code

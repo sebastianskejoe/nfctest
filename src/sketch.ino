@@ -38,7 +38,7 @@ void setup()
     // Setup LCD and serial
     LCD.begin(16,2);
     LCD.clear();
-    LCD.print("NFC test v0.0!");
+    LCD.print("NFC test v0.1!");
     Serial.begin(115200);
     setDebugLCD(&LCD);
 
@@ -95,7 +95,6 @@ void loop() {
             break;
         }
         state++;
-        delay(50);
     }
 }
 
