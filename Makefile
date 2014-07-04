@@ -1,21 +1,24 @@
-all:
-	cd lib/NFC/ && go run generate.go
+NFCLIB=lib/NFC
+
+all: generate build upload
+
+generate:
+	$(MAKE) -C $(NFCLIB)
+
+build:
 	ino build
+
+upload:
 	ino upload
 
-ng:
-	ino build
-	ino upload
+no-gen: build upload
 
-nu:
-	cd lib/NFC/ && go run generate.go
-	ino build
+no-upload: generate build
 
 ### TEST
 LIBRARY_PATH=/usr/share/arduino/libraries
 HW_PATH=/usr/share/arduino/hardware/arduino
 
-NFCLIB=lib/NFC
 LIBS=$(LIBRARY_PATH)/LiquidCrystal_old\
 	 $(HW_PATH)/cores/arduino\
 	 /usr/avr/include\
